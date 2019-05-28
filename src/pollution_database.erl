@@ -14,14 +14,34 @@
 -include("pollution_const.hrl").
 
 start() ->
-  mnesia:create_schema([node()]),
-  mnesia:start(),
-  case mnesia:create_table(station, [{attributes, record_info(fields, station)}]) of
-    {aborted, _} -> {atomic, ok};
-    {atomic, ok} -> {atomic, ok}
-  end.
+  case mnesia:start() of
+    {aborted, _} ->
+      io:format("Creating database~n"),
+      mnesia:create_schema([node()]),
+      mnesia:start();
+    ok ->
+      io:format("Database already exists~n"),
+      {atomic, ok}
+  end,
+  create_tables_if_not_exists().
 
-stop() -> mnesia:stop().
+create_tables_if_not_exists() ->
+  case
+    mnesia:create_table(station, [
+      {attributes, record_info(fields, station)}])
+  of
+    {aborted, {already_exists, _}} ->
+      io:format("Table station exists~n"),
+      ok;
+    {aborted, Error} ->
+      io:format("Error ~p~n", [Error]);
+      {atomic, ok}->ok
+end .
+
+
+stop() ->
+  io:format("Stopping database~n"),
+  mnesia:stop().
 
 insert_stations([Station | Stations]) ->
 %%  io:format("Inserting station ~s~n", [Station#station.name]),
@@ -36,7 +56,7 @@ delete_stations() -> mnesia:clear_table(station).
 read_stations() ->
   CatchAll = [{'_', [], ['$_']}],
   SelectFun = fun() -> mnesia:select(station, CatchAll) end,
-  {atomic,Stations} = mnesia:transaction(SelectFun),
+  {atomic, Stations} = mnesia:transaction(SelectFun),
   Stations.
 
 update_stations(Stations) -> delete_stations(), insert_stations(Stations).
